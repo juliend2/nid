@@ -5,6 +5,8 @@ static void HorizontalLine() => Console.WriteLine("-----------------------------
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<TailscaleService>();
+builder.Services.AddSingleton<QrCodeService>();
+
 builder.WebHost.ConfigureKestrel(options => 
 {
   options.Limits.MaxRequestBodySize = 500 * 1024 * 1024; // 500 MB
@@ -13,15 +15,19 @@ builder.WebHost.ConfigureKestrel(options =>
 var app = builder.Build();
 
 var tailscale = app.Services.GetRequiredService<TailscaleService>();
-var hostname = await tailscale.GetTailnetHostnameAsync();
+var qrService = app.Services.GetRequiredService<QrCodeService>();
 
+var hostname = await tailscale.GetTailnetHostnameAsync();
+string accessUrl = $"http://{hostname}:{Port}";
 
 HorizontalLine();
 if (!string.IsNullOrEmpty(hostname)) {
-  Console.WriteLine($"🌐 Tailnet: http://{hostname}:{Port}");
+  Console.WriteLine($"🌐 Tailnet: {accessUrl}");
 } else {
   Console.WriteLine("📍 Tailscale not found. Use local IP instead.");
 }
+
+qrService.PrintQrToConsole(accessUrl);
 HorizontalLine();
 
 app.MapGet("/", () => Results.Content(@"
