@@ -3,16 +3,31 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Diagnostics;
 using System.Text.Json;
+using Nid.Services;
 
 int Port = 5000;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<TailscaleService>();
 builder.WebHost.ConfigureKestrel(options => 
 {
   options.Limits.MaxRequestBodySize = 500 * 1024 * 1024; // 500 MB
 });
 
 var app = builder.Build();
+
+var tailscale = app.Services.GetRequiredService<TailscaleService>();
+var hostname = await tailscale.GetTailnetHostnameAsync();
+
+void WriteLine() => Console.WriteLine("-------------------------------------------------------------");
+
+WriteLine();
+if (!string.IsNullOrEmpty(hostname)) {
+  Console.WriteLine($"🌐 Tailnet: http://{hostname}:{Port}");
+} else {
+  Console.WriteLine("📍 Tailscale not found. Use local IP instead.");
+}
+WriteLine();
 
 app.MapGet("/", () => Results.Content(@"
   <!DOCTYPE html>
@@ -38,42 +53,4 @@ app.MapPost("/upload", async (IFormFile file) =>
   return Results.Ok($"File '{file.FileName}' saved to {filePath}!");
 }).DisableAntiforgery();
 
-
-static string GetTailscaleHostname()
-{
-    try
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "tailscale",
-            Arguments = "status --json",
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(startInfo);
-        using var reader = process.StandardOutput;
-        string json = reader.ReadToEnd();
-        
-        // Parse the "Self" node which contains your machine's info
-        using var doc = JsonDocument.Parse(json);
-        var dnsName = doc.RootElement.GetProperty("Self").GetProperty("DNSName").GetString();
-
-        // Tailscale returns names with a trailing dot (e.g., machine.net.), so we trim it
-        return dnsName?.TrimEnd('.') ?? "localhost";
-    }
-    catch
-    {
-        return "localhost"; // Fallback if Tailscale isn't running
-    }
-}
-
-var tailscaleName = GetTailscaleHostname();
-if (tailscaleName == "localhost") 
-{
-  Console.WriteLine("Could not find a tailscale name");
-}
-
-Console.WriteLine($"Try connecting on: http://{tailscaleName}:{Port}");
 app.Run($"http://0.0.0.0:{Port}");
