@@ -1,6 +1,7 @@
 using Nid.Services;
 
 int Port = 5000;
+static void HorizontalLine() => Console.WriteLine("-------------------------------------------------------------");
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<TailscaleService>();
@@ -14,15 +15,14 @@ var app = builder.Build();
 var tailscale = app.Services.GetRequiredService<TailscaleService>();
 var hostname = await tailscale.GetTailnetHostnameAsync();
 
-void WriteLine() => Console.WriteLine("-------------------------------------------------------------");
 
-WriteLine();
+HorizontalLine();
 if (!string.IsNullOrEmpty(hostname)) {
   Console.WriteLine($"🌐 Tailnet: http://{hostname}:{Port}");
 } else {
   Console.WriteLine("📍 Tailscale not found. Use local IP instead.");
 }
-WriteLine();
+HorizontalLine();
 
 app.MapGet("/", () => Results.Content(@"
   <!DOCTYPE html>
@@ -45,7 +45,19 @@ app.MapPost("/upload", async (IFormFile file) =>
   var filePath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", file.FileName);
   using var stream = new FileStream(filePath, FileMode.Create);
   await file.CopyToAsync(stream);
-  return Results.Ok($"File '{file.FileName}' saved to {filePath}!");
+  return Results.Content(@$"
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta name='viewport' content='width=device-width, initial-scale=1'>
+    </head>
+    <body>
+      <h1>Hurray</h1>
+      <p>
+        File '{file.FileName}' saved to {filePath}!
+      </p>
+    </body>
+  </html>", "text/html");
 }).DisableAntiforgery();
 
 app.Run($"http://0.0.0.0:{Port}");
