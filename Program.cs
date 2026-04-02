@@ -56,6 +56,9 @@ app.MapPost("/upload", async (IFormFile file) =>
       <p>
         File '{file.FileName}' saved to {filePath}!
       </p>
+      <p>
+        <a href='/'>Go Back</a>
+      </p>
     </body>
   </html>", "text/html");
 }).DisableAntiforgery();
