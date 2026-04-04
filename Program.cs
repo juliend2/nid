@@ -1,4 +1,5 @@
 using Nid.Services;
+using RazorLight;
 
 int Port = 5000;
 static void HorizontalLine() => Console.WriteLine("-------------------------------------------------------------");
@@ -30,43 +31,47 @@ if (!string.IsNullOrEmpty(hostname)) {
 qrService.PrintQrToConsole(accessUrl);
 HorizontalLine();
 
-app.MapGet("/", () => Results.Content(@"
-  <!DOCTYPE html>
-  <html>
-    <head>
-      <meta name='viewport' content='width=device-width, initial-scale=1'>
-    </head>
-    <body>
-      <h1>Upload to PC</h1>
-      <form action='/upload' method='post' enctype='multipart/form-data'>
-        <input type='file' name='file' required />
-        <button type='submit'>Upload</button>
-      </form>
-    </body>
-  </html>
-", "text/html"));
+app.MapGet("/", async () => {
+  string rendered = await Templates.GetRenderedPage("./templates/upload.cshtml", "");
+  return Results.Content(rendered, "text/html");
+});
 
-app.MapPost("/upload", async (IFormFile file) =>
+app.MapPost("/upload", async (HttpRequest request) =>
 {
-  var filePath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", file.FileName);
-  using var stream = new FileStream(filePath, FileMode.Create);
-  await file.CopyToAsync(stream);
-  return Results.Content(@$"
-  <!DOCTYPE html>
-  <html>
-    <head>
-      <meta name='viewport' content='width=device-width, initial-scale=1'>
-    </head>
-    <body>
-      <h1>Hurray</h1>
-      <p>
-        File '{file.FileName}' saved to {filePath}!
-      </p>
-      <p>
-        <a href='/'>Go Back</a>
-      </p>
-    </body>
-  </html>", "text/html");
+  var form = await request.ReadFormAsync();
+  string? text = form["text"];
+  var message = "";
+  var file = form.Files.GetFile("file");
+  if (file == null)
+  {
+    File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), "uploads", "text-file.txt"), text);
+    message = "Text saved";
+  }
+  else
+  {
+    var filePath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", file.FileName);
+    using var stream = new FileStream(filePath, FileMode.Create);
+    await file.CopyToAsync(stream);
+    message = $"File '{file.FileName}' saved to {filePath}!";
+  }
+  string rendered = await Templates.GetRenderedPage("./templates/uploaded.cshtml", message);
+  return Results.Content(rendered, "text/html");
 }).DisableAntiforgery();
 
 app.Run($"http://0.0.0.0:{Port}");
+
+public static class Templates {
+  public static async Task<string> GetRenderedPage(string templatePath, string message)
+  {
+    var engine = new RazorLightEngineBuilder()
+      .UseEmbeddedResourcesProject(typeof(Program))
+      .UseMemoryCachingProvider()
+      .Build();
+    string template = File.ReadAllText(templatePath);
+    var model = new {
+      Message = message
+    };
+    string result = await engine.CompileRenderStringAsync(templatePath, template, model);
+    return result;
+  }
+}
